@@ -1,0 +1,58 @@
+{
+  "Centauros": {
+    "nome": "Centauros",
+    "descricao": "Rápidos na conquista.",
+    "poder": "Avanço rápido: Pode jogar um bando adicional neste turno.",
+    "quantidade": 12,
+    "cartas": [
+      {"nome": "Centauro da Floresta", "reino": "Floresta"},
+      {"nome": "Centauro da Montanha", "reino": "Montanha"},
+      {"nome": "Centauro do Deserto", "reino": "Deserto"},
+      {"nome": "Centauro do Pântano", "reino": "Pântano"},
+      {"nome": "Centauro da Planície", "reino": "Planícies"},
+      {"nome": "Centauro do Mar", "reino": "Mar"}
+    ]
+  },
+  "Halflings": {
+    "nome": "Halflings",
+    "descricao": "Muitos números facilmente.",
+    "poder": "Horda ágil: Suas cartas não contam para controle de reino, mas criam bandos grandes.",
+    "quantidade": 12,
+    "cartas": [
+      {"nome": "Halfling da Floresta", "reino": "Floresta"},
+      {"nome": "Halfling da Montanha", "reino": "Montanha"},
+      {"nome": "Halfling do Deserto", "reino": "Deserto"},
+      {"nome": "Halfling do Pântano", "reino": "Pântano"},
+      {"nome": "Halfling da Planície", "reino": "Planícies"},
+      {"nome": "Halfling do Mar", "reino": "Mar"}
+    ]
+  },
+  "Elfos": {
+    "nome": "Elfos",
+    "descricao": "Magia antiga de mãos.",
+    "poder": "Retenção mágica: Mantenha cartas na mão de acordo com o tamanho do bando jogado.",
+    "quantidade": 12,
+    "cartas": [
+      {"nome": "Elfo da Floresta", "reino": "Floresta"},
+      {"nome": "Elfo da Montanha", "reino": "Montanha"},
+      {"nome": "Elfo do Deserto", "reino": "Deserto"},
+      {"nome": "Elfo do Pântano", "reino": "Pântano"},
+      {"nome": "Elfo da Planície", "reino": "Planícies"},
+      {"nome": "Elfo do Mar", "reino": "Mar"}
+    ]
+  },
+  "Esqueletos": {
+    "nome": "Esqueletos",
+    "descricao": "A horda morta-viva não para.",
+    "poder": "Ressurreição: Esqueletos podem assumir o reino de qualquer outra carta no bando.",
+    "quantidade": 12,
+    "cartas": [
+      {"nome": "Esqueleto da Floresta", "reino": "Floresta"},
+      {"nome": "Esqueleto da Montanha", "reino": "Montanha"},
+      {"nome": "Esqueleto do Deserto", "reino": "Deserto"},
+      {"nome": "Esqueleto do Pântano", "reino": "Pântano"},
+      {"nome": "Esqueleto da Planície", "reino": "Planícies"},
+      {"nome": "Esqueleto do Mar", "reino": "Mar"}
+    ]
+  }
+}
