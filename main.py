@@ -3,6 +3,15 @@ import sys
 import os
 from models import Jogo, Tribo, Era
 
+# Cores dos Reinos para o mapa (nao peguei de models pq ele ta inicalizado dentro de init e nao global)
+cores_reinos = {
+    "Floresta": (50, 255, 50),      # verde neon
+    "Montanha": (200, 200, 200),    # cinza claro
+    "Deserto": (255, 230, 80),      # amarelo vivo
+    "Pântano": (120, 255, 180),     # verde água claro
+    "Planícies": (180, 255, 100),   # verde limão
+    "Mar": (80, 180, 255),          # azul claro
+}
 # Configurações Básicas
 WIDTH, HEIGHT = 1280, 720
 FPS = 60
@@ -21,6 +30,69 @@ pygame.display.set_caption("Ethnos - Python Simplificado")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont("Verdana", 36)
 small_font = pygame.font.SysFont("Verdana", 20)
+# Dados para o log de eventos
+log_font = pygame.font.SysFont("Verdana", 14)
+logs_scroll_x = 0
+logs_scroll_y = 0
+
+# UI de Log (painel de eventos)
+ui_logs = []
+# Função para adicionar mensagens ao log
+def append_log(msg: str) -> None:
+    import time
+    ts = time.strftime("%H:%M:%S")
+    ui_logs.append(f"[{ts}] {msg}")
+    if len(ui_logs) > 200:  # cap alto para histórico
+        ui_logs.pop(0)
+# Função para desenhar o painel de log
+def draw_log_panel(surface, x, y, width, height, scroll_y):
+    panel = pygame.Rect(x, y, width, height)
+    pygame.draw.rect(surface, (15, 15, 20), panel, border_radius=8)
+    pygame.draw.rect(surface, (80, 80, 100), panel, 2, border_radius=8)
+    
+    # título
+    draw_text("Eventos", small_font, (255, 215, 0), surface, panel.x + 8, panel.y + 6)
+    title_h = small_font.get_linesize()
+
+    pad_x = 8
+    pad_y = title_h + 8          # espaço para o título
+    inner_x = panel.x + pad_x
+    inner_y = panel.y + pad_y
+    max_w = panel.width - pad_x * 2
+    line_h = log_font.get_linesize()
+    extra_bottom = line_h * 2    # espaço extra para destacar últimos logs
+
+    # construir linhas com quebra (uma por linha)
+    wrapped_lines = []
+    for raw in ui_logs[-200:]:
+        words = raw.split(" ")
+        cur = ""
+        for w in words:
+            test = (cur + " " + w).strip() if cur else w
+            if log_font.size(test)[0] <= max_w:
+                cur = test
+            else:
+                if cur:
+                    wrapped_lines.append(cur)
+                cur = w
+        if cur:
+            wrapped_lines.append(cur)
+
+    # desenhar conteúdo dentro da área interna
+    inner_rect = pygame.Rect(inner_x, inner_y, max_w, panel.height - pad_y - 8)
+    old_clip = surface.get_clip()
+    surface.set_clip(inner_rect)
+    start_y = inner_y + scroll_y
+    for i, line in enumerate(wrapped_lines):
+        ty = start_y + i * line_h
+        if ty + line_h < inner_rect.y or ty > inner_rect.y + inner_rect.height:
+            continue
+        txt_surf = log_font.render(line, True, (200, 200, 200))
+        surface.blit(txt_surf, (inner_x, ty))
+    surface.set_clip(old_clip)
+
+    # indicador de scroll
+    pygame.draw.rect(surface, (60,60,60), (panel.x + 4, panel.y + panel.height - 6, panel.width - 8, 4), border_radius=2)
 
 # Estados do Jogo
 MENU = 0
@@ -164,6 +236,7 @@ def setup_loop():
                 for idx, t in tribos_selecionadas.items():
                     jogo.jogadores[idx].tribo_selecionada = t
                 jogo.iniciar_jogo(list(tribos_selecionadas.values()))
+                append_log("Jogo iniciado")
                 state = GAME
                 
             if jogador_atual_idx < 4:
@@ -249,7 +322,7 @@ def draw_mapa_pontos(screen, jogo):
             screen.blit(t_vazio, t_vazio.get_rect(center=(x, my_y)))
 
 def game_loop():
-    global state, cartas_selecionadas, scroll_x_mao, scroll_x_mercado
+    global state, cartas_selecionadas, scroll_x_mao, scroll_x_mercado, logs_scroll_x, logs_scroll_y
     screen.fill((40, 40, 60))
     
     draw_mapa_pontos(screen, jogo)
@@ -259,10 +332,11 @@ def game_loop():
     pygame.draw.rect(screen, (60, 60, 80), ui_panel, 4)
 
     # UI Direita (HUD)
-    ui_x = 940
+    # ui ficando um layer acima do mapa, para garantir legibilidade dos textos
+    ui_x = ui_panel.x + 40
     pygame.draw.circle(screen, GREEN, (ui_x - 10, 30), 8)
     draw_text(f"Era Atual: {jogo.eraAtual.name}", small_font, WHITE, screen, ui_x, 20)
-    
+
     # Hand UI
     atual = jogo.jogador_atual()
     draw_text("Vez do Jogador:", small_font, (200, 200, 200), screen, ui_x, 60)
@@ -275,47 +349,58 @@ def game_loop():
     import pygame.draw as pydraw
     
     # --- MERCADO ABERTO (MESA) ---
-    pydraw.rect(screen, (40, 50, 40), (0, 500, 900, 100))
-    pydraw.rect(screen, (80, 100, 80), (0, 500, 900, 100), 4)
+    mesa_rect = pygame.Rect(0, 500, 900, 100)
+    pydraw.rect(screen, (40, 50, 40), mesa_rect)
+    pydraw.rect(screen, (80, 100, 80), mesa_rect, 4)
     draw_text("Mesa:", small_font, (150, 200, 150), screen, 20, 535)
-    
+
     mercado_rects = []
     max_w_mercado = len(jogo.tabuleiro.cartasAbertas) * 115
     max_scroll_m = max(0, max_w_mercado - 700)
     if scroll_x_mercado < -max_scroll_m: scroll_x_mercado = -max_scroll_m
     if scroll_x_mercado > 0: scroll_x_mercado = 0
-    
+
     mx = 110 + scroll_x_mercado
+
+    # CLIPPING: Limita o desenho das cartas à área da mesa
+    old_clip = screen.get_clip()
+    screen.set_clip(mesa_rect)
     for i, c in enumerate(jogo.tabuleiro.cartasAbertas):
         r = pygame.Rect(mx, 515, 105, 70)
         pydraw.rect(screen, (60, 80, 60), r, border_radius=4)
         pydraw.rect(screen, (150, 200, 150), r, 2, border_radius=4)
-        
+
         n = c.nome
         if len(n) > 12: n = n[:10] + "..."
         nome_carta_text = f"{c.tribo.nome}" if hasattr(c, "tribo") and c.tribo else n
-        
-        # Renderização miniatura (Mercado)
+
         text_mini = pygame.font.SysFont("Verdana", 14).render(nome_carta_text, True, WHITE)
         screen.blit(text_mini, (r.x + 5, r.y + 5))
-        
+
         if hasattr(c, "reino"):
             r_str = c.reino
-            text_r = pygame.font.SysFont("Verdana", 12).render(r_str[:12], True, GREEN)
+            cor_reino = cores_reinos.get(r_str, GREEN)  # fallback para verde
+            text_r = pygame.font.SysFont("Verdana", 12).render(r_str[:12], True, cor_reino)
             screen.blit(text_r, (r.x + 5, r.y + 30))
-            
+
         mercado_rects.append((r, c))
         mx += 115
-    
+    # Fim do clipping para a mesa
+    screen.set_clip(old_clip)
+
     # --- MÃO DO JOGADOR ---
-    pydraw.rect(screen, (30, 30, 45), (0, 600, WIDTH, 120))
-    pydraw.rect(screen, (60, 60, 80), (0, 600, WIDTH, 120), 4)
+    # Reservar a parte inferior para a mão do jogador, com scroll horizontal se necessário, evitando sobreposicao de cartas com a UI lateral direita
+    HAND_AREA_WIDTH = 900  # reserva coluna direita (x >= 900) para UI
+    hand_area_rect = pygame.Rect(0, 600, HAND_AREA_WIDTH, 120)
+    pydraw.rect(screen, (30, 30, 45), hand_area_rect)
+    pydraw.rect(screen, (60, 60, 80), hand_area_rect, 4)
 
     draw_text("Sua Mão:", small_font, WHITE, screen, 20, 640)
-    
-    # Limitar o scroll maximo baseado no tamanho da mão
+
+    # Limitar o scroll máximo baseado no tamanho da mão
     max_w = len(atual.mao) * 155
-    max_scroll = max(0, max_w - 700) # Espaço disponível (~700 px)
+    hand_display_width = HAND_AREA_WIDTH - 150  # mão começa em x=150
+    max_scroll = max(0, max_w - hand_display_width)
     if scroll_x_mao < -max_scroll: scroll_x_mao = -max_scroll
     if scroll_x_mao > 0: scroll_x_mao = 0
 
@@ -323,36 +408,38 @@ def game_loop():
     hx = 150 + scroll_x_mao
     for idx, c in enumerate(atual.mao):
         r = pygame.Rect(hx, 620, 140, 80)
-        pydraw.rect(screen, (70, 70, 100), r, border_radius=5)
-        
-        # Se for líder ou selecionada, mudar a cor da borda
-        border_color = (200, 200, 220)
-        thickness = 2
-        if idx in cartas_selecionadas:
-            if cartas_selecionadas.index(idx) == 0:
-                border_color = (255, 215, 0) # LÍDER: Borda Dourada
-                thickness = 4
-                draw_text("LÍDER", small_font, (255, 215, 0), screen, r.x + 35, r.y - 25)
-            else:
-                border_color = (0, 255, 0) # SELECIONADA: Borda Verde
-                thickness = 3
-                
-        pydraw.rect(screen, border_color, r, thickness, border_radius=5)
-        
-        # se for dragão
-        n = c.nome
-        if len(n) > 15: n = n[:13] + "..."
-        
-        # Corrigindo exibição da tribo na carta
-        nome_carta_text = f"{c.tribo.nome}" if hasattr(c, "tribo") and c.tribo else n
-        draw_text(nome_carta_text, small_font, WHITE, screen, r.x + 5, r.y + 10)
-        
-        if hasattr(c, "reino"):
-            r_str = c.reino
-            # Se for muito longo o reino, diminui um pouco para caber
-            draw_text(r_str[:16], small_font, GREEN, screen, r.x + 5, r.y + 45)
-        elif hasattr(c, "efeito"):
-            draw_text("DRAGÃO!", small_font, RED, screen, r.x + 5, r.y + 45)
+        # collision para destacar carta sob mouse ou selecionada
+        if r.colliderect(hand_area_rect):
+            pydraw.rect(screen, (70, 70, 100), r, border_radius=5)
+            # Se for líder ou selecionada, mudar a cor da borda
+            border_color = (200, 200, 220)
+            thickness = 2
+            if idx in cartas_selecionadas:
+                if cartas_selecionadas.index(idx) == 0:
+                    border_color = (255, 215, 0) # LÍDER: Borda Dourada
+                    thickness = 4
+                    draw_text("LÍDER", small_font, (255, 215, 0), screen, r.x + 35, r.y - 25)
+                else:
+                    border_color = (0, 255, 0) # SELECIONADA: Borda Verde
+                    thickness = 3      
+            pydraw.rect(screen, border_color, r, thickness, border_radius=5)
+            
+            # se for dragão
+            n = c.nome
+            if len(n) > 15: n = n[:13] + "..."
+            
+            # Corrigindo exibição da tribo na carta
+            nome_carta_text = f"{c.tribo.nome}" if hasattr(c, "tribo") and c.tribo else n
+            draw_text(nome_carta_text, small_font, WHITE, screen, r.x + 5, r.y + 10)
+            
+            if hasattr(c, "reino"):
+                r_str = c.reino
+                # Se for muito longo o reino, diminui um pouco para caber
+                cor_reino = cores_reinos.get(r_str, GREEN)
+                draw_text(r_str[:16], small_font, cor_reino, screen, r.x + 5, r.y + 45)
+
+            elif hasattr(c, "efeito"):
+                draw_text("DRAGÃO!", small_font, RED, screen, r.x + 5, r.y + 45)
             
         hand_rects.append((r, c, idx))
         hx += 155
@@ -384,7 +471,14 @@ def game_loop():
         # O nome do jogador vinha cortado até a letra 5 (Ex: Jogad), aumentei para 12.
         draw_text(f"{marca} {j.nome[:12]} | B:{total_b} | Gpts:{j.glorias}", small_font, (255,215,0), screen, ui_x, y_offset)
         y_offset += 30
-        
+
+    # depois do loop que atualiza y_offset (Bandos e Glórias)
+    logs_x = ui_panel.x + 10
+    logs_y = y_offset + 10
+    logs_w = ui_panel.width - 20
+    logs_h = min(HEIGHT - logs_y - 10, 160)
+    draw_log_panel(screen, logs_x, logs_y, logs_w, logs_h, logs_scroll_y)
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
@@ -392,20 +486,55 @@ def game_loop():
         if event.type == pygame.MOUSEWHEEL:
             # Pegar a posição do mouse para saber se scrolla a mão (embaixo) ou o mercado (meio)
             mx, my = pygame.mouse.get_pos()
-            if my > 600:
+            if my > 600 and mx < HAND_AREA_WIDTH:
                 scroll_x_mao += event.y * 30  # scroll na HUD Mão
             elif 500 < my < 600:
                 scroll_x_mercado += event.y * 30 # scroll no Mercado
-        if event.type == pygame.MOUSEBUTTONDOWN:
+            # Scroll no log se o mouse estiver sobre ele
+            logs_rect = pygame.Rect(ui_panel.x + 10, y_offset + 10, ui_panel.width - 20, min(HEIGHT - (y_offset+10) - 10, 160))
+            if logs_rect.collidepoint(mx, my):
+                pad_x = 8
+                title_h = small_font.get_linesize()
+                pad_y = title_h + 8
+                max_w = logs_rect.width - pad_x * 2
+                line_h = log_font.get_linesize()
+                extra_bottom = line_h * 2
+
+                # contar linhas (mesma lógica do draw)
+                total_lines = 0
+                for raw_line in ui_logs[-200:]:
+                    words = raw_line.split(" ")
+                    cur = ""
+                    for w in words:
+                        test = (cur + " " + w).strip() if cur else w
+                        if log_font.size(test)[0] <= max_w:
+                            cur = test
+                        else:
+                            if cur:
+                                total_lines += 1
+                            cur = w
+                    if cur:
+                        total_lines += 1
+
+                content_h = total_lines * line_h
+                inner_h = logs_rect.height - pad_y - 8
+                min_scroll = min(0, inner_h - content_h - extra_bottom)
+
+                logs_scroll_y = max(min_scroll, min(0, logs_scroll_y + -event.y * 20))
+                if logs_scroll_y < min_scroll: logs_scroll_y = min_scroll
+                if logs_scroll_y > 0: logs_scroll_y = 0
+        if event.type == pygame.MOUSEBUTTONDOWN and getattr(event, "button", 1) == 1:
             if btn_comprar.collidepoint(event.pos):
                 carta = jogo.tabuleiro.compra_carta()
                 if carta:
                     # Regra do dragão
                     if carta.nome == "Dragão":
                         print("DRAGÃO COMPRADO!")
+                        append_log(f"Dragão comprado por {atual.nome}")
                         jogo.tabuleiro.dragoes.append(carta)
                         if len(jogo.tabuleiro.dragoes) >= 3:
                             print("FIM DA ERA!")
+                            append_log("3 Dragões na mesa! Passando de Era...")
                             jogo.passar_era()
                             # Restart dragons and map layout se tivermos mudado de era.
                             jogo.tabuleiro.dragoes.clear()
@@ -432,6 +561,7 @@ def game_loop():
                     
                     if not hasattr(lider, "reino"):
                         print("Um dragão não pode ser líder de bando!")
+                        append_log("Tentativa de formar bando com dragão inválido!")
                         continue
                         
                     valido = True
@@ -472,6 +602,7 @@ def game_loop():
                                 if novo_bando.tamanho_atual() > current_marcadores:
                                     r_obj.marcadores[atual.id] = current_marcadores + 1
                                     print(f"Marcador adicionado no reino {reino_alvo} pro Jogador {atual.nome}")
+                                    append_log(f"Marcador adicionado no reino {reino_alvo} pro Jogador {atual.nome}")
                                     
                         if hasattr(novo_bando, "ativar_poder"):
                             novo_bando.ativar_poder()
@@ -484,6 +615,7 @@ def game_loop():
                         jogo.proximo_turno()
                     else:
                         print("Seleção inválida! Elas devem pertencer à MESMA tribo OU MESMO reino do LÍDER (1ª carta).")
+                        append_log("Seleção de bando inválida!")
             elif btn_passar.collidepoint(event.pos):
                 cartas_selecionadas.clear()
                 jogo.proximo_turno()
