@@ -59,8 +59,7 @@ class Jogo:
             self.dar_carta(self.tabuleiro.compra_carta(), j)
         self._id_jogador_atual = 0
 
-    def pasar_era(self):
-        self._pontuar_reinos()
+    def passar_era(self):
         if self.eraAtual == Era.PROLOGO:
             self.eraAtual = Era.JORNADA
             self._iniciar_era()
