@@ -160,38 +160,111 @@ class Renderer:
         s = self.screen
         pnl = pygame.Rect(720, MAP_Y, SCREEN_W - 730, MAP_H)
         self.panel(s, pnl, (26, 26, 42), (48, 48, 72))
-        x, y = 735, MAP_Y + 10
-        s.blit(self.f_md.render("Baralho", True, LGRAY), (x, y)); y += 24
+
+        left_x = pnl.x + 15
+        top_y = pnl.y + 10
+
+        # largura da coluna direita (toda dedicada a "Bonus por Bando")
+        right_w = 220
+        right_x = pnl.x + pnl.w - right_w - 10
+
+        # --- Baralho (título) ---
+        y = top_y
+        s.blit(self.f_md.render("Baralho", True, LGRAY), (left_x, y))
+        # marcar y do título para alinhar o título direito
+        title_y = y
+        y += 24
+
+        # quantidade de cartas
         dt = self.f_lg.render(str(len(tabuleiro.baralho)), True, WHITE)
-        s.blit(dt, (x, y))
-        s.blit(self.f_sm.render("cartas", True, GRAY), (x + dt.get_width() + 8, y + 6)); y += 35
-        s.blit(self.f_md.render("Dragoes", True, (220, 80, 80)), (x, y)); y += 24
+        s.blit(dt, (left_x, y))
+        s.blit(self.f_sm.render("cartas", True, GRAY), (left_x + dt.get_width() + 8, y + 6))
+
+        # Dragões posicionados à direita do Baralho (mesma linha de conteúdo)
+        dragons_x = left_x + 140
+        # Se precisar empurrar mais à direita quando tela pequena, ajuste dragons_x
+        d_y = y
         for d in range(NUM_DRAGONS):
             c = (200, 50, 50) if d < len(tabuleiro.dragoes) else (55, 55, 55)
-            pygame.draw.circle(s, c, (x + 15 + d * 35, y + 10), 13)
-            pygame.draw.circle(s, WHITE, (x + 15 + d * 35, y + 10), 13, 1)
+            cx = dragons_x + d * 35
+            pygame.draw.circle(s, c, (cx, d_y + 10), 13)
+            pygame.draw.circle(s, WHITE, (cx, d_y + 10), 13, 1)
             if d < len(tabuleiro.dragoes):
                 dt2 = self.f_sm.render("D", True, WHITE)
-                s.blit(dt2, dt2.get_rect(center=(x + 15 + d * 35, y + 10)))
+                s.blit(dt2, dt2.get_rect(center=(cx, d_y + 10)))
+
+        # cursor vertical após baralho/dragões
         y += 35
-        pygame.draw.line(s, PANEL_BD, (x, y), (x + pnl.w - 30, y), 1); y += 8
-        s.blit(self.f_md.render("Tribos dos Jogadores", True, LGRAY), (x, y)); y += 24
+
+        # separator horizontal que termina alinhado com a coluna direita
+        sep_x_end = right_x - 12
+        pygame.draw.line(s, PANEL_BD, (left_x, y), (sep_x_end, y), 1)
+        y += 8
+
+        # --- Tribos dos Jogadores (começa ABAIXO do bloco Baralho) ---
+        tribes_title_y = y
+        s.blit(self.f_md.render("Tribos dos Jogadores", True, LGRAY), (left_x, tribes_title_y))
+        tribe_y = tribes_title_y + 24
+        # posição onde a descrição começa e largura máxima antes do separador direito
+        desc_x = left_x + 200
+        desc_max_w = (right_x - 12) - desc_x - 8
+        if desc_max_w < 40:
+            desc_max_w = 40
+
         for p in jogadores:
             if p.tribo:
                 rc = p.tribo.cor
-                pygame.draw.circle(s, rc, (x + 10, y + 8), 9)
-                pygame.draw.circle(s, BLACK, (x + 10, y + 8), 9, 1)
+                pygame.draw.circle(s, rc, (left_x + 10, tribe_y + 8), 9)
+                pygame.draw.circle(s, BLACK, (left_x + 10, tribe_y + 8), 9, 1)
                 st = self.f_sm.render(p.tribo.simbolo, True, WHITE)
-                s.blit(st, st.get_rect(center=(x + 10, y + 8)))
-                s.blit(self.f_sm.render(p.nome, True, p.cor), (x + 26, y))
-                s.blit(self.f_tiny.render(p.tribo.nome, True, LGRAY), (x + 110, y + 2))
-            y += 22
-        y += 6
-        pygame.draw.line(s, PANEL_BD, (x, y), (x + pnl.w - 30, y), 1); y += 8
-        s.blit(self.f_md.render("Bonus por Bando", True, LGRAY), (x, y)); y += 22
+                s.blit(st, st.get_rect(center=(left_x + 10, tribe_y + 8)))
+                s.blit(self.f_sm.render(p.nome, True, p.cor), (left_x + 26, tribe_y))
+                s.blit(self.f_tiny.render(p.tribo.nome, True, LGRAY), (left_x + 110, tribe_y + 2))
+
+                # wrap simples da descrição para caber na área esquerda
+                abil = (p.tribo.descricao or "")
+                words = abil.split(" ")
+                lines = []
+                cur = ""
+                for w in words:
+                    test = (cur + " " + w).strip() if cur else w
+                    if self.f_tiny.size(test)[0] <= desc_max_w:
+                        cur = test
+                    else:
+                        if cur:
+                            lines.append(cur)
+                        cur = w
+                if cur:
+                    lines.append(cur)
+
+                # renderiza até 2 linhas (ajuste se quiser mais)
+                max_lines = 2
+                for li, ln in enumerate(lines[:max_lines]):
+                    s.blit(self.f_tiny.render(ln, True, GRAY), (desc_x, tribe_y + 2 + li * (self.f_tiny.get_linesize() - 2)))
+
+                # avançar verticalmente conforme linhas usadas
+                line_h = max(22, (len(lines[:max_lines]) * self.f_tiny.get_linesize()))
+                tribe_y += line_h
+            else:
+                s.blit(self.f_sm.render("Sem tribo", True, GRAY), (left_x + 26, tribe_y))
+                tribe_y += 22
+
+        # separador vertical entre área principal e coluna direita
+        sep_x = right_x - 12
+        pygame.draw.line(s, PANEL_BD, (sep_x, pnl.y + 12), (sep_x, pnl.y + pnl.h - 12), 1)
+
+        # --- Coluna direita inteira: Bonus por Bando ---
+        # título e conteúdo alinhados verticalmente com o título do Baralho
+        s.blit(self.f_md.render("Bonus por Bando", True, LGRAY), (right_x, title_y))
+        by = title_y + 24
         for sz, pts in BAND_BONUS.items():
             lbl = "carta" if sz == 1 else "cartas"
-            s.blit(self.f_tiny.render(f"{sz} {lbl} = {pts} pts", True, GRAY), (x, y)); y += 15
+            s.blit(self.f_tiny.render(f"{sz} {lbl} = {pts} pts", True, GRAY), (right_x, by))
+            by += 20
+
+        # retorna rects usados pelo setup (inalterado)
+        # esta função não altera a coleta de rects do setup/menu
+        return {}
 
     def draw_market(self, cartas):
         s = self.screen
@@ -264,6 +337,65 @@ class Renderer:
             pygame.draw.rect(s, (14, 14, 28), (0, MSG_Y, SCREEN_W, 40))
             pygame.draw.line(s, GOLD, (0, MSG_Y), (SCREEN_W, MSG_Y), 1)
             s.blit(self.f_md.render(msg, True, (255, 255, 130)), (15, MSG_Y + 8))
+    # O log de eventos é desenhado por último
+    def draw_event_log(self, ui_logs: list, scroll_y: int = 0):
+        s = self.screen
+        x = 10
+        y = HAND_Y + HAND_H + 10
+        w = SCREEN_W - 20
+        max_h = MSG_Y - y - 10
+        h = min(200, max_h)
+
+        pnl = pygame.Rect(x, y, w, h)
+        self.panel(s, pnl, (20,20,26), PANEL_BD)
+        s.blit(self.f_sm.render("Eventos", True, GOLD), (pnl.x + 8, pnl.y + 6))
+
+        pad_x = 8
+        title_h = self.f_sm.get_linesize()
+        pad_y = title_h + 8
+        inner_x = pnl.x + pad_x
+        inner_y = pnl.y + pad_y
+        max_w = pnl.width - pad_x * 2
+        line_h = self.f_tiny.get_linesize()
+        extra_bottom = line_h * 2
+
+        wrapped = []
+        for raw in ui_logs[-400:]:
+            words = raw.split(" ")
+            cur = ""
+            for wrd in words:
+                test = (cur + " " + wrd).strip() if cur else wrd
+                if self.f_tiny.size(test)[0] <= max_w:
+                    cur = test
+                else:
+                    if cur:
+                        wrapped.append(cur)
+                    cur = wrd
+            if cur:
+                wrapped.append(cur)
+
+        inner_rect = pygame.Rect(inner_x, inner_y, max_w, pnl.height - pad_y - 8)
+        content_h = len(wrapped) * line_h
+
+        old_clip = s.get_clip()
+        s.set_clip(inner_rect)
+
+        # Se o usuário NÃO estiver fazendo scroll manual (scroll_y==0),
+        # auto-posiciona para mostrar as linhas mais recentes ao final.
+        if scroll_y == 0:
+            start_y = inner_y + min(0, inner_rect.height - content_h - extra_bottom)
+        else:
+            start_y = inner_y + scroll_y
+
+        for i, line in enumerate(wrapped):
+            ty = start_y + i * line_h
+            if ty + line_h < inner_rect.y or ty > inner_rect.y + inner_rect.height:
+                continue
+            txt_surf = self.f_tiny.render(line, True, (200,200,200))
+            s.blit(txt_surf, (inner_x, ty))
+        s.set_clip(old_clip)
+
+        pygame.draw.rect(s, (60,60,60), (pnl.x + 4, pnl.y + pnl.height - 6, pnl.width - 8, 4), border_radius=2)
 
     def draw_menu(self, btn_start):
         s = self.screen

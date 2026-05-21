@@ -32,6 +32,8 @@ class App:
         self.setup_btn_rects: dict = {}
         self.market_rects: list = []
         self.hand_rects: list = []
+        self.ui_logs: list[str] = []
+        self.logs_scroll = 0
         
         bx = 20
         self.buttons = {
@@ -57,6 +59,7 @@ class App:
         self.jogo.iniciar_jogo()
         self.state = "TURN"
         self.msg_set(f"Era {self.jogo.eraAtual.numero} ({self.jogo.eraAtual}) comecou! Vez de {self.cur.nome}.")
+        self.append_log(f"Jogo iniciado — Era {self.jogo.eraAtual.numero} ({self.jogo.eraAtual})")
         
     def comprar_baralho(self):
         j = self.cur
@@ -67,9 +70,10 @@ class App:
         if ok:
             self.jogo.proximo_turno()
             self.msg_set(f"Vez de {self.cur.nome}.")
+            self.append_log(f"{j.nome} comprou do baralho.")
         elif len(self.jogo.tabuleiro.dragoes) >= NUM_DRAGONS:
             self._end_age()
-            
+            self.append_log(f"Era {self.jogo.eraAtual.numero} ({self.jogo.eraAtual}) terminou!")
     def comprar_mercado(self, idx):
         j = self.cur
         if len(j.mao) >= 10:
@@ -79,6 +83,7 @@ class App:
             carta = cartas.pop(idx)
             j.pegar_carta(carta)
             self.jogo.proximo_turno()
+            self.append_log(f"{j.nome} comprou do mercado.")
             self.msg_set(f"Vez de {self.cur.nome}.")
             
     def jogar_bando(self, indices, leader_idx):
@@ -103,6 +108,7 @@ class App:
         
         bonus = BAND_BONUS.get(len(aliados), 15)
         self.msg_set(f"{j.nome} jogou bando de {len(aliados)} em {reino.nome_curto} (+{bonus})")
+        self.append_log(f"{j.nome} jogou bando de {len(aliados)} em {reino.nome_curto}")
         
         if len(self.jogo.tabuleiro.dragoes) >= NUM_DRAGONS:
             self._end_age()
@@ -114,6 +120,7 @@ class App:
     def _end_age(self):
         self.jogo._pontuar_reinos()
         self.msg_set(f"Era {self.jogo.eraAtual.numero} ({self.jogo.eraAtual}) terminou!")
+        self.append_log(f"Fim da Era {self.jogo.eraAtual.numero} ({self.jogo.eraAtual})")
         if self.jogo.eraAtual.value == 3:
             self.state = "GAME_OVER"
         else:
@@ -205,6 +212,12 @@ class App:
             for pi, nome in self.setup_tribes.items():
                 self.jogo.jogadores[pi].tribo = TRIBOS[nome]
             self.iniciar()
+    def append_log(self, msg: str):
+        import time
+        ts = time.strftime("%H:%M:%S")
+        self.ui_logs.append(f"[{ts}] {msg}")
+        if len(self.ui_logs) > 400:
+            self.ui_logs.pop(0)
             
     def run(self):
         running = True
@@ -222,7 +235,7 @@ class App:
                             running = False
                     elif ev.key == pygame.K_r and self.state == "GAME_OVER":
                         self.state = "MENU"
-                elif ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+                elif ev.type == pygame.MOUSEBUTTONDOWN and getattr(ev, "button", 1) == 1:
                     pos = ev.pos
                     if self.state == "MENU":
                         if self.buttons["start"].clicked(pos):
@@ -239,6 +252,16 @@ class App:
                         self.on_click_leader(pos)
                     elif self.state == "AGE_END":
                         self.on_click_age_end(pos)
+                elif ev.type == pygame.MOUSEWHEEL:
+                    mx, my = pygame.mouse.get_pos()
+                    lx, ly = 10, HAND_Y + HAND_H + 10
+                    lw, lh = SCREEN_W - 20, min(200, MSG_Y - ly - 10)
+                    if lx <= mx <= lx + lw and ly <= my <= ly + lh:
+                        line_h = self.renderer.f_tiny.get_linesize()
+                        # aproximação: usa número de entradas no log (wrap pode aumentar linhas)
+                        content_h = max(0, len(self.ui_logs) * line_h)
+                        min_scroll = min(0, lh - content_h - line_h*2)
+                        self.logs_scroll = max(min_scroll, min(0, self.logs_scroll + -ev.y * 20))
                         
             self.screen.fill(BG)
             jogo = self.jogo
@@ -261,6 +284,7 @@ class App:
                 if self.msg_timer > 0:
                     self.msg_timer -= 1
                 R.draw_message(self.msg, self.msg_timer)
+                R.draw_event_log(self.ui_logs, self.logs_scroll)
                 
             pygame.display.flip()
             
