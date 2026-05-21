@@ -267,7 +267,14 @@ cartas_selecionadas = []  # Índices na mão do jogador atual
 scroll_x_mao = 0          # Scroll horizontal das cartas da mão
 scroll_x_mercado = 0      # Scroll horizontal do mercado aberto
 
-def draw_mapa_pontos(screen, jogo):
+# --- arrastar mapa ---
+map_offset = [0, 0]           # [x, y] deslocamento atual
+map_dragging = False
+map_drag_start = (0, 0)       # posicao do mouse quando iniciou drag
+map_offset_start = (0, 0)     # offset inicial quando iniciou drag
+
+def draw_mapa_pontos(screen, jogo, offset=(0,0)):
+    ox, oy = offset
     # Conexões/Linhas do mapa (Layout básico Ethnos)
     conexoes = [
         (0,1), (1,2),     # Top connection
@@ -275,13 +282,14 @@ def draw_mapa_pontos(screen, jogo):
         (3,4), (4,5)      # Bottom connection
     ]
     for orig, dest in conexoes:
-        p1 = reinos_posicoes[orig]["pos"]
-        p2 = reinos_posicoes[dest]["pos"]
+        p1 = (reinos_posicoes[orig]["pos"][0] + ox, reinos_posicoes[orig]["pos"][1] + oy)
+        p2 = (reinos_posicoes[dest]["pos"][0] + ox, reinos_posicoes[dest]["pos"][1] + oy)
         pygame.draw.line(screen, (100, 100, 120), p1, p2, 4)
         
     for r_pos in reinos_posicoes:
         x, y = r_pos["pos"]
         # Encontra a instância real do Reino:
+        x += ox; y += oy
         reino_obj = next((r for r in jogo.reinos if r.nome == r_pos["nome"]), None)
         if not reino_obj: continue
         
@@ -322,10 +330,10 @@ def draw_mapa_pontos(screen, jogo):
             screen.blit(t_vazio, t_vazio.get_rect(center=(x, my_y)))
 
 def game_loop():
-    global state, cartas_selecionadas, scroll_x_mao, scroll_x_mercado, logs_scroll_x, logs_scroll_y
+    global state, cartas_selecionadas, scroll_x_mao, scroll_x_mercado, logs_scroll_x, logs_scroll_y, map_offset, map_dragging, map_drag_start, map_offset_start
     screen.fill((40, 40, 60))
     
-    draw_mapa_pontos(screen, jogo)
+    draw_mapa_pontos(screen, jogo, tuple(map_offset))
 
     ui_panel = pygame.Rect(900, 0, 380, HEIGHT)
     pygame.draw.rect(screen, (30, 30, 45), ui_panel)
@@ -391,6 +399,8 @@ def game_loop():
     # --- MÃO DO JOGADOR ---
     # Reservar a parte inferior para a mão do jogador, com scroll horizontal se necessário, evitando sobreposicao de cartas com a UI lateral direita
     HAND_AREA_WIDTH = 900  # reserva coluna direita (x >= 900) para UI
+    MESA_TOP = 500
+
     hand_area_rect = pygame.Rect(0, 600, HAND_AREA_WIDTH, 120)
     pydraw.rect(screen, (30, 30, 45), hand_area_rect)
     pydraw.rect(screen, (60, 60, 80), hand_area_rect, 4)
@@ -479,6 +489,45 @@ def game_loop():
     logs_h = min(HEIGHT - logs_y - 10, 160)
     draw_log_panel(screen, logs_x, logs_y, logs_w, logs_h, logs_scroll_y)
 
+    # Função local para limitar offset do mapa para não invadir UI
+    def clamp_map_offset():
+        # calcula bounding box dos reinos
+        node_radius = 50
+        label_pad = 40
+        pad = node_radius + label_pad
+
+        xs = [p["pos"][0] for p in reinos_posicoes]
+        ys = [p["pos"][1] for p in reinos_posicoes]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+
+        # area disponível para o mapa (não deve invadir UI lateral nem mesa/mao)
+        left_limit = 0
+        right_limit = HAND_AREA_WIDTH
+        # limites verticais (permitir mover para baixo "por baixo" do UI,
+        # mas não permitir arrastar infinitamente)
+        top_limit = 0
+        bottom_limit = MESA_TOP
+        extra_up = 50       # quanto pode subir além do topo (pequeno)
+        extra_down = 220    # quanto pode descer por baixo da UI
+
+        # calcula limites de offset para manter os reinos dentro da área permitida
+        min_ox = left_limit - (min_x - pad)
+        max_ox = right_limit - (max_x + pad)
+
+        min_oy = top_limit - extra_up - min_y
+        max_oy = bottom_limit + extra_down - max_y
+
+        # Clamp
+        if map_offset[0] < min_ox:
+            map_offset[0] = min_ox
+        if map_offset[0] > max_ox:
+            map_offset[0] = max_ox
+        if map_offset[1] < min_oy:
+            map_offset[1] = min_oy
+        if map_offset[1] > max_oy:
+            map_offset[1] = max_oy
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
@@ -523,6 +572,33 @@ def game_loop():
                 logs_scroll_y = max(min_scroll, min(0, logs_scroll_y + -event.y * 20))
                 if logs_scroll_y < min_scroll: logs_scroll_y = min_scroll
                 if logs_scroll_y > 0: logs_scroll_y = 0
+        
+        # --- Drag do mapa ---
+        if event.type == pygame.MOUSEBUTTONDOWN and getattr(event, "button", 1) == 1:
+            mx, my = pygame.mouse.get_pos()
+            # definir a área ativa do mapa (fora da UI)
+            map_area_rect = pygame.Rect(0, 0, HAND_AREA_WIDTH, MESA_TOP)
+            if map_area_rect.collidepoint(mx, my):
+                map_dragging = True
+                map_drag_start = (mx, my)
+                map_offset_start = (map_offset[0], map_offset[1])
+                # evitar que o clique seja processado como 'comprar carta' etc.
+                continue
+        # Soltar o mouse para parar de arrastar
+        if event.type == pygame.MOUSEBUTTONUP and getattr(event, "button", 1) == 1:
+            if map_dragging:
+                map_dragging = False
+                continue
+        ## Durante o movimento do mouse, se estivermos arrastando, atualizar o offset do mapa
+        if event.type == pygame.MOUSEMOTION:
+            if map_dragging:
+                mx, my = pygame.mouse.get_pos()
+                dx = mx - map_drag_start[0]
+                dy = my - map_drag_start[1]
+                map_offset[0] = map_offset_start[0] + dx
+                map_offset[1] = map_offset_start[1] + dy
+                clamp_map_offset()
+                continue
         if event.type == pygame.MOUSEBUTTONDOWN and getattr(event, "button", 1) == 1:
             if btn_comprar.collidepoint(event.pos):
                 carta = jogo.tabuleiro.compra_carta()
