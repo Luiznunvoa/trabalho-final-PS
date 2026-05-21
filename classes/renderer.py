@@ -181,20 +181,26 @@ class Renderer:
         s.blit(self.f_sm.render("cartas", True, GRAY), (left_x + dt.get_width() + 8, y + 6))
 
         # Dragões posicionados à direita do Baralho (mesma linha de conteúdo)
-        dragons_x = left_x + 140
-        # Se precisar empurrar mais à direita quando tela pequena, ajuste dragons_x
-        d_y = y
+        # posiciona à direita do número de cartas
+        dragons_x = left_x + dt.get_width() + 100
+        # alinha verticalmente com o centro do número do baralho
+        circle_cy = y + dt.get_height() // 2
+
+        # título acima do grupo de dragões
+        group_cx = dragons_x + (NUM_DRAGONS - 1) * 35 / 2
+        title_surf = self.f_md.render("Dragões", True, LGRAY)
+        s.blit(title_surf, title_surf.get_rect(center=(int(group_cx), circle_cy - 30)))
+
         for d in range(NUM_DRAGONS):
             c = (200, 50, 50) if d < len(tabuleiro.dragoes) else (55, 55, 55)
             cx = dragons_x + d * 35
-            pygame.draw.circle(s, c, (cx, d_y + 10), 13)
-            pygame.draw.circle(s, WHITE, (cx, d_y + 10), 13, 1)
-            if d < len(tabuleiro.dragoes):
-                dt2 = self.f_sm.render("D", True, WHITE)
-                s.blit(dt2, dt2.get_rect(center=(cx, d_y + 10)))
+            pygame.draw.circle(s, c, (cx, circle_cy), 13)
+            pygame.draw.circle(s, WHITE, (cx, circle_cy), 13, 1)
+            dt2 = self.f_sm.render("D", True, WHITE if d < len(tabuleiro.dragoes) else DGRAY)
+            s.blit(dt2, dt2.get_rect(center=(cx, circle_cy)))
 
-        # cursor vertical após baralho/dragões
-        y += 35
+        # cursor vertical após baralho/dragões (mais espaço para o bloco Baralho)
+        y += 46
 
         # separator horizontal que termina alinhado com a coluna direita
         sep_x_end = right_x - 12
@@ -243,7 +249,7 @@ class Renderer:
                     s.blit(self.f_tiny.render(ln, True, GRAY), (desc_x, tribe_y + 2 + li * (self.f_tiny.get_linesize() - 2)))
 
                 # avançar verticalmente conforme linhas usadas
-                line_h = max(22, (len(lines[:max_lines]) * self.f_tiny.get_linesize()))
+                line_h = max(18, (len(lines[:max_lines]) * self.f_tiny.get_linesize()))                
                 tribe_y += line_h
             else:
                 s.blit(self.f_sm.render("Sem tribo", True, GRAY), (left_x + 26, tribe_y))
